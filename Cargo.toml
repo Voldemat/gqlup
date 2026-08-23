@@ -6,7 +6,8 @@ edition = "2024"
 [dependencies]
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 humantime-serde = { version = "1.1.1", default-features = false }
-reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "http2", "rustls"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "http2", "rustls-no-provider"] }
+rustls = { version = "0.23.43", default-features = false, features = ["ring"] }
 semver = { version = "1.0.28", default-features = false }
 serde = { version = "1.0.229", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1.0.151", default-features = false, features = ["std"] }
