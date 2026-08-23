@@ -1,0 +1,77 @@
+FROM crazymax/osxcross:15.5-alpine AS osxcross
+FROM rust:alpine3.23 AS builder
+WORKDIR /usr/local/app/
+RUN rustup target add \
+    x86_64-apple-darwin aarch64-apple-darwin \
+    aarch64-unknown-linux-musl x86_64-unknown-linux-musl && \
+    apk --no-cache add clang lld musl-dev && rm -rf /var/cache/apk/* && \
+    arch="$(apk --print-arch)" && \
+    if [ "$arch" = "x86_64" ]; then \
+        ln -sf /usr/bin/cc /usr/local/bin/linker-x86_64 && \
+        wget https://github.com/troglobit/misc/releases/download/11-20211120/aarch64-linux-musl-cross.tgz && \
+        tar -C /usr/local -xzf aarch64-linux-musl-cross.tgz && \
+        rm aarch64-linux-musl-cross.tgz && \
+        ln -sf /usr/local/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc /usr/local/bin/linker-aarch64; \
+    elif [ "$arch" = "aarch64" ]; then \
+        wget https://github.com/troglobit/misc/releases/download/11-20211120/x86_64-linux-musl-cross.tgz && \
+        tar -C /usr/local -xzf x86_64-linux-musl-cross.tgz && \
+        rm x86_64-linux-musl-cross.tgz && \
+        ln -sf /usr/local/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc /usr/local/bin/linker-x86_64 && \
+        ln -sf /usr/bin/cc /usr/local/bin/linker-aarch64; \
+    fi && \
+    mkdir .cargo && \
+    cat > /usr/local/app/.cargo/config.toml << 'EOF'
+[target.x86_64-apple-darwin]
+linker = "x86_64-apple-darwin24.5-clang"
+rustflags = ["-C", "link-arg=-mmacosx-version-min=15.0", "-C", "link-arg=-L/osxcross/lib"]
+
+[target.aarch64-apple-darwin]
+linker = "aarch64-apple-darwin24.5-clang"
+rustflags = ["-C", "link-arg=-mmacosx-version-min=15.0", "-C", "link-arg=-L/osxcross/lib"]
+
+[target.x86_64-unknown-linux-musl]
+linker = "/usr/local/bin/linker-x86_64"
+
+[target.aarch64-unknown-linux-musl]
+linker = "/usr/local/bin/linker-aarch64"
+EOF
+COPY ./ ./
+ARG CLI_VERSION
+RUN --mount=type=bind,from=osxcross,source=/osxcross,target=/osxcross \
+    LD_LIBRARY_PATH="/osxcross/lib:$LD_LIBRARY_PATH" PATH="/osxcross/bin/:$PATH" cargo build --release \
+        --target=aarch64-apple-darwin \
+        --target=x86_64-apple-darwin \
+        --target=aarch64-unknown-linux-musl \
+        --target=x86_64-unknown-linux-musl && \
+    mkdir targets && \
+    mv target/x86_64-apple-darwin/release/gqlup ./targets/x86_64-darwin && \
+    mv target/aarch64-apple-darwin/release/gqlup ./targets/aarch64-darwin && \
+    mv target/x86_64-unknown-linux-musl/release/gqlup ./targets/x86_64-linux && \
+    mv target/aarch64-unknown-linux-musl/release/gqlup ./targets/aarch64-linux
+
+FROM scratch AS targets
+COPY --from=builder /usr/local/app/targets /targets
+
+FROM scratch AS x86_64-darwin-scratch
+COPY --from=targets /targets/x86_64-darwin /gqlup
+CMD ["/gqlup"]
+
+FROM scratch AS aarch64-darwin-scratch
+COPY --from=targets /targets/aarch64-darwin /gqlup
+CMD ["/gqlup"]
+
+FROM scratch AS x86_64-linux-scratch
+COPY --from=targets /targets/x86_64-linux /gqlup
+CMD ["/gqlup"]
+
+FROM scratch AS aarch64-linux-scratch
+COPY --from=targets /targets/aarch64-linux /gqlup
+CMD ["/gqlup"]
+
+FROM --platform=linux/amd64 alpine:3.23 AS x86_64-alpine
+COPY --from=targets /targets/x86_64-linux /bin/gqlup
+CMD ["/gqlup"]
+
+FROM --platform=linux/arm64 alpine:3.23 AS aarch64-alpine
+COPY --from=targets /targets/aarch64-linux /bin/gqlup
+CMD ["/gqlup"]
