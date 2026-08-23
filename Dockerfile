@@ -7,17 +7,17 @@ RUN rustup target add \
     apk --no-cache add clang lld musl-dev && rm -rf /var/cache/apk/* && \
     arch="$(apk --print-arch)" && \
     if [ "$arch" = "x86_64" ]; then \
-        ln -sf /usr/bin/cc /usr/local/bin/linker-x86_64 && \
+        ln -sf /usr/bin/cc /usr/local/bin/x86_64-unknown-linux-musl && \
         wget https://github.com/troglobit/misc/releases/download/11-20211120/aarch64-linux-musl-cross.tgz && \
         tar -C /usr/local -xzf aarch64-linux-musl-cross.tgz && \
         rm aarch64-linux-musl-cross.tgz && \
-        ln -sf /usr/local/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc /usr/local/bin/linker-aarch64; \
+        ln -sf /usr/local/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc /usr/local/bin/aarch64-unknown-linux-musl; \
     elif [ "$arch" = "aarch64" ]; then \
         wget https://github.com/troglobit/misc/releases/download/11-20211120/x86_64-linux-musl-cross.tgz && \
         tar -C /usr/local -xzf x86_64-linux-musl-cross.tgz && \
         rm x86_64-linux-musl-cross.tgz && \
-        ln -sf /usr/local/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc /usr/local/bin/linker-x86_64 && \
-        ln -sf /usr/bin/cc /usr/local/bin/linker-aarch64; \
+        ln -sf /usr/local/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc /usr/local/bin/x86_64-unknown-linux-musl && \
+        ln -sf /usr/bin/cc /usr/local/bin/aarch64-unknown-linux-musl; \
     fi && \
     mkdir .cargo && \
     cat > /usr/local/app/.cargo/config.toml << 'EOF'
@@ -30,15 +30,21 @@ linker = "aarch64-apple-darwin24.5-clang"
 rustflags = ["-C", "link-arg=-mmacosx-version-min=15.0", "-C", "link-arg=-L/osxcross/lib"]
 
 [target.x86_64-unknown-linux-musl]
-linker = "/usr/local/bin/linker-x86_64"
+linker = "/usr/local/bin/x86_64-unknown-linux-musl"
 
 [target.aarch64-unknown-linux-musl]
-linker = "/usr/local/bin/linker-aarch64"
+linker = "/usr/local/bin/aarch64-unknown-linux-musl"
 EOF
 COPY ./ ./
 ARG CLI_VERSION
 RUN --mount=type=bind,from=osxcross,source=/osxcross,target=/osxcross \
-    LD_LIBRARY_PATH="/osxcross/lib:$LD_LIBRARY_PATH" PATH="/osxcross/bin/:$PATH" cargo build --release \
+    LD_LIBRARY_PATH="/osxcross/lib:$LD_LIBRARY_PATH" \
+    PATH="/osxcross/bin/:$PATH" \
+    CC_x86_64_unknown_linux_musl="/usr/local/bin/x86_64-unknown-linux-musl" \
+    CC_aarch64_unknown_linux_musl="/usr/local/bin/aarch64-unknown-linux-musl" \
+    CC_aarch64_apple_darwin="/osxcross/bin/aarch64-apple-darwin24.5-clang" \
+    CC_x86_64_apple_darwin="/osxcross/bin/x86_64-apple-darwin24.5-clang" \
+    cargo build --release \
         --target=aarch64-apple-darwin \
         --target=x86_64-apple-darwin \
         --target=aarch64-unknown-linux-musl \
