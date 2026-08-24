@@ -1,6 +1,6 @@
 #[derive(serde::Deserialize)]
 pub struct GQLConfig {
-    pub version: String,
+    pub version: Option<semver::Version>,
 }
 
 pub fn exec(mut argv: Vec<std::ffi::OsString>) {
@@ -9,11 +9,14 @@ pub fn exec(mut argv: Vec<std::ffi::OsString>) {
         let gql_config: GQLConfig =
             serde_yaml::from_reader(std::fs::File::open("./gql.yaml").unwrap())
                 .unwrap();
-        gql_config.version
+        gql_config.version.map(|v| v.to_string())
     } else {
+        None
+    }
+    .unwrap_or_else(|| {
         let gqlup_config = crate::cli::config::load_config_or_exit();
         gqlup_config.default_version
-    };
+    });
     let gql_path = crate::cli::paths::get_gqlup_binary_install_path()
         .join(format!("gql-{version}"));
     if !std::fs::exists(&gql_path).unwrap() {
