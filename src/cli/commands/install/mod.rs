@@ -184,6 +184,9 @@ fn run(args: Args) {
             .map(|v| v < semver::Version::parse(&version).unwrap())
             .unwrap_or(true)
         {
+            if std::fs::exists(&gql_latest_path).unwrap() {
+                std::fs::remove_file(&gql_latest_path).unwrap();
+            }
             std::os::unix::fs::symlink(target_file_path, gql_latest_path)
                 .unwrap()
         }
